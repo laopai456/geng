@@ -41,7 +41,7 @@ def render_daily_report(
             lines.append("")
 
     lines.append("---")
-    lines.append("*数据源: 微博 / B站 / 抖音  •  释义由 GLM-4.6 生成*")
+    lines.append("*数据源: 微博 / B站 / 抖音  •  释义由 DeepSeek 生成*")
     lines.append("")
 
     path = out_dir / f"{date}.md"

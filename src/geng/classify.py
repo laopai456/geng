@@ -1,10 +1,10 @@
 # src/geng/classify.py
-"""[3] 调 GLM-4.5-Air 判断每条候选是否为真梗。"""
+"""[3] 调 DeepSeek (deepseek-chat) 判断每条候选是否为真梗。"""
 from __future__ import annotations
 import json
 import logging
 from .models import Candidate, ClassifiedMeme
-from .llm import LLMClient, GLMClient
+from .llm import LLMClient, DeepSeekClient
 from . import config
 
 log = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def classify_memes(
     # 客户端构造可能失败(如缺 API key),失败则整体降级
     if client is None:
         try:
-            client = GLMClient()
+            client = DeepSeekClient()
         except Exception as e:
             log.warning("classify: LLM 客户端构造失败,降级保留全部候选: %s", e)
             return [

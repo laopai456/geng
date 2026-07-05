@@ -17,14 +17,15 @@ def test_run_daily_end_to_end(tmp_path, monkeypatch):
     ]
     monkeypatch.setattr("geng.pipeline.discover.fetch_trending", lambda **kw: fake_items)
 
-    # mock classify
+    # mock classify / explain —— 用 messages 长度区分:
+    # classify 发 system+user(2条),explain 只发 user(1条)
     class FakeLLM:
         def chat(self, model, messages):
-            if "classify" in model or "air" in model:
+            if len(messages) >= 2:
                 return '{"items":[{"title":"YYDS","is_meme":true,"confidence":0.9,"reason":"缩写"},{"title":"某明星离婚","is_meme":false,"confidence":0.1,"reason":"八卦"}]}'
             return '{"definition":"永远的神","origin":"电竞","usage":"赞美","examples":["科比YYDS"]}'
-    monkeypatch.setattr("geng.pipeline.classify.GLMClient", lambda *a, **kw: FakeLLM())
-    monkeypatch.setattr("geng.pipeline.explain.GLMClient", lambda *a, **kw: FakeLLM())
+    monkeypatch.setattr("geng.pipeline.classify.DeepSeekClient", lambda *a, **kw: FakeLLM())
+    monkeypatch.setattr("geng.pipeline.explain.DeepSeekClient", lambda *a, **kw: FakeLLM())
 
     # mock bili
     class FakeBili:
@@ -53,8 +54,8 @@ def test_run_daily_degrades_when_llm_fails(tmp_path, monkeypatch):
 
     class FailingLLM:
         def chat(self, model, messages): raise RuntimeError("500")
-    monkeypatch.setattr("geng.pipeline.classify.GLMClient", lambda *a, **kw: FailingLLM())
-    monkeypatch.setattr("geng.pipeline.explain.GLMClient", lambda *a, **kw: FailingLLM())
+    monkeypatch.setattr("geng.pipeline.classify.DeepSeekClient", lambda *a, **kw: FailingLLM())
+    monkeypatch.setattr("geng.pipeline.explain.DeepSeekClient", lambda *a, **kw: FailingLLM())
     class FakeBili:
         def search_count(self, kw): return 234
     monkeypatch.setattr("geng.pipeline.verify.HttpxBiliClient", lambda *a, **kw: FakeBili())

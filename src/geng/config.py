@@ -11,11 +11,11 @@ EXCLUDE_LISTS_DIR = Path("data/exclude")
 MEME_LENGTH_RANGE = (3, 14)
 MIN_PLATFORMS_CROSS = 2
 
-# LLM
-ZHIPU_API_KEY = os.environ.get("ZHIPU_API_KEY", "")
-CLASSIFY_MODEL = "glm-4.5-air"
-EXPLAIN_MODEL = "glm-4.6"
-LLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+# LLM (DeepSeek, OpenAI 兼容接口)
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "")
+CLASSIFY_MODEL = "deepseek-chat"          # 便宜,做分类
+EXPLAIN_MODEL = "deepseek-chat"           # 同一模型,释义条目少够用
+LLM_BASE_URL = "https://api.deepseek.com/v1"
 LLM_MAX_RETRY = 2
 LLM_TIMEOUT = 30
 
