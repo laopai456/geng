@@ -1,142 +1,120 @@
-"""[1] 直接抓各平台热搜(微博 / B站)。
+"""[1] 抓 B站排行榜热门视频 + 每个视频的 top 评论。
 
-设计: 每个平台一个独立的 fetcher 函数,签名统一返回 list[HotItem]。
-任一平台失败不阻塞其余。返回原始 HotItem,后续 filter 阶段做去重/合并。
+替代旧的"抓热搜榜"逻辑——热梗真正栖息在评论区。
+某视频失败不阻塞其余。
 """
 from __future__ import annotations
 
 import logging
-import datetime
-from typing import Callable
+import time
 
 import httpx
 
 from . import config
-from .models import HotItem
+from .models import VideoInfo, Comment
 
 log = logging.getLogger(__name__)
 
-# 通用请求头: 模拟浏览器,绕过最基础的 UA 校验
+# 通用请求头: 模拟浏览器,Referer 提高 B站评论接口可靠性
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/126.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-}
-
-Fetcher = Callable[[str], list[HotItem]]
-
-
-def fetch_weibo(date: str) -> list[HotItem]:
-    """微博热搜榜。接口: https://weibo.com/ajax/side/hotSearch
-
-    返回结构: data.realtime = [{word, num, category, ...}]
-    """
-    url = "https://weibo.com/ajax/side/hotSearch"
-    with httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
-        raw = resp.json()
-
-    items: list[HotItem] = []
-    for entry in raw.get("data", {}).get("realtime", []) or []:
-        title = str(entry.get("word", "")).strip()
-        if not title:
-            continue
-        try:
-            hot = int(entry.get("num") or 0)
-        except (TypeError, ValueError):
-            hot = 0
-        # 去掉微博热搜常见的 # 标记
-        title = title.strip("#")
-        if not title:
-            continue
-        items.append(
-            HotItem(
-                id=f"weibo-{entry.get('word')}",
-                platform="weibo",
-                title=title,
-                hot=hot,
-                url=f"https://s.weibo.com/weibo?q=%23{title}%23",
-                fetched_at=date,
-            )
-        )
-    return items
-
-
-def fetch_bilibili(date: str) -> list[HotItem]:
-    """B站热搜榜。接口: https://app.bilibili.com/x/v2/search/trending/ranking
-
-    返回结构: data.list = [{keyword, show_name, ...}]
-    """
-    url = "https://app.bilibili.com/x/v2/search/trending/ranking"
-    params = {"limit": 50, "main_ver": "v3"}
-    with httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS) as client:
-        resp = client.get(url, params=params)
-        resp.raise_for_status()
-        raw = resp.json()
-
-    items: list[HotItem] = []
-    # 不同版本接口字段略有差异,做容错
-    entries = (
-        raw.get("data", {}).get("list")
-        or raw.get("data", {}).get("trending", {}).get("list")
-        or []
-    )
-    for entry in entries:
-        title = str(entry.get("show_name") or entry.get("keyword") or "").strip()
-        if not title:
-            continue
-        try:
-            hot = int(entry.get("hot_id") or entry.get("goto") or 0)
-        except (TypeError, ValueError):
-            hot = 0
-        items.append(
-            HotItem(
-                id=f"bilibili-{title}",
-                platform="bilibili",
-                title=title,
-                hot=hot,
-                url=str(entry.get("uri") or entry.get("url") or ""),
-                fetched_at=date,
-            )
-        )
-    return items
-
-
-# 平台 → fetcher 映射。新增平台只需在此注册。
-FETCHERS: dict[str, Fetcher] = {
-    "weibo": fetch_weibo,
-    "bilibili": fetch_bilibili,
-    # 抖音接口需要 cookie/鉴权,反爬严,暂不直接抓。
-    # 若要恢复,可在这里注册 fetch_douyin。
+    "Referer": "https://www.bilibili.com/",
 }
 
 
-def fetch_trending(
-    platforms: list[str] | None = None,
-    date: str | None = None,
-    client=None,  # 保留参数兼容旧签名(忽略),直接抓取不需要外部 client
-) -> list[HotItem]:
-    """抓多个平台热搜,某平台失败不阻塞其余。
-
-    参数 client 仅用于向后兼容测试调用,实际直接抓取忽略它。
-    """
-    platforms = platforms or config.PLATFORMS
-    date = date or datetime.date.today().isoformat()
-    all_items: list[HotItem] = []
-    for p in platforms:
-        fetcher = FETCHERS.get(p)
-        if fetcher is None:
-            log.warning("discover: 未知平台 %s (跳过)", p)
-            continue
+def fetch_top_videos(limit: int = 10) -> list[VideoInfo]:
+    """B站全站排行榜 top N 视频。接口空时返回 []。"""
+    url = f"{config.BILI_RANKING_URL}"
+    with httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS) as client:
+        resp = client.get(url, params={"rid": 0, "type": "all"})
+        resp.raise_for_status()
+        raw = resp.json()
+    entries = raw.get("data", {}).get("list") or []
+    videos: list[VideoInfo] = []
+    for e in entries[:limit]:
         try:
-            items = fetcher(date)
-            log.info("discover: %s 抓到 %d 条", p, len(items))
-            all_items.extend(items)
+            videos.append(
+                VideoInfo(
+                    bvid=str(e.get("bvid", "")),
+                    aid=int(e.get("aid", 0)),
+                    title=str(e.get("title", "")).strip(),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return videos
+
+
+def fetch_comments(
+    video: VideoInfo,
+    pages: int = 10,
+    page_size: int = 30,
+) -> list[Comment]:
+    """单个视频的 top 评论(按热度)。翻 pages 页。空页时停止。"""
+    comments: list[Comment] = []
+    with httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS) as client:
+        for page in range(1, pages + 1):
+            try:
+                resp = client.get(
+                    config.BILI_REPLY_URL,
+                    params={
+                        "type": 1,
+                        "oid": video.aid,
+                        "next": page,
+                        "ps": page_size,
+                        "mode": 3,
+                    },
+                )
+                resp.raise_for_status()
+                raw = resp.json()
+            except Exception as e:
+                log.warning(
+                    "discover: 视频 %s 第 %d 页评论失败: %s",
+                    video.bvid, page, e,
+                )
+                break
+            replies = raw.get("data", {}).get("replies") or []
+            if not replies:
+                break  # 空页 = 没更多评论
+            for rep in replies:
+                msg = (rep.get("content") or {}).get("message", "")
+                if not msg:
+                    continue
+                try:
+                    likes = int(rep.get("like") or 0)
+                except (TypeError, ValueError):
+                    likes = 0
+                comments.append(
+                    Comment(
+                        video_bvid=video.bvid,
+                        message=msg,
+                        likes=likes,
+                    )
+                )
+            time.sleep(0.3)  # 礼貌限速
+    return comments
+
+
+def collect_corpus(
+    videos_limit: int = 10,
+    pages_per_video: int = 10,
+) -> tuple[list[VideoInfo], list[Comment]]:
+    """抓多个视频的评论,汇成语料库。某视频失败不阻塞其余。
+
+    返回 (videos, comments) 元组。
+    """
+    videos = fetch_top_videos(limit=videos_limit)
+    log.info("discover: 抓到 %d 个热门视频", len(videos))
+    all_comments: list[Comment] = []
+    for v in videos:
+        try:
+            cmts = fetch_comments(v, pages=pages_per_video)
+            log.info("discover: 视频 %s 抓到 %d 条评论", v.bvid, len(cmts))
+            all_comments.extend(cmts)
         except Exception as e:
-            log.warning("discover: 平台 %s 抓取失败: %s", p, e)
-    return all_items
+            log.warning("discover: 视频 %s 评论抓取失败: %s", v.bvid, e)
+    return videos, all_comments

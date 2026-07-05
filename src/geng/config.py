@@ -24,6 +24,10 @@ BILI_VERIFY_THRESHOLD = 20
 BILI_SEARCH_URL = "https://api.bilibili.com/x/web-interface/search/type"
 HTTP_TIMEOUT = 20
 
+# B站 discover: 排行榜 + 评论接口(2026-07 改版,直接抓评论区挖梗)
+BILI_RANKING_URL = "https://api.bilibili.com/x/web-interface/ranking/v2"
+BILI_REPLY_URL = "https://api.bilibili.com/x/v2/reply/main"
+
 # 存储
 DB_PATH = Path("data/memes.db")
 DAILY_REPORT_DIR = Path("daily")
