@@ -19,8 +19,8 @@ def run_daily(
     import datetime
     date = date or datetime.date.today().isoformat()
 
-    # [1] 发现: 抓视频 + 评论
-    videos, comments = discover.collect_corpus()
+    # [1] 发现: 抓视频 + 评论。无登录态每视频只~3条热评,故多抓视频
+    videos, comments = discover.collect_corpus(videos_limit=30, pages_per_video=5)
     log.info("[1] discover: %d 视频, %d 条评论", len(videos), len(comments))
     total_raw = len(comments)
 
