@@ -26,10 +26,8 @@ def run_daily(
 
     # [1.5] 提取: 评论 → 候选短语
     phrases = extract.extract_candidates(comments)
-    # 同时拿到每个短语的出现次数(用于热度排序)。重新统计一次,或者改 extract 返回。
-    # 简单做法: 让 extract 也返回 counts。但为不破坏 extract 签名,这里在 pipeline 重算。
     phrase_counts = _count_phrases(comments, phrases)
-    log.info("[1.5] extract: %d 个候选短语", len(phrases))
+    log.info("[1.5] extract: %d 个候选短语, 样例: %s", len(phrases), phrases[:8])
 
     # [2] 粗筛: 排除清单
     candidates = filter_mod.coarse_filter(phrases, date=date, phrase_counts=phrase_counts)
