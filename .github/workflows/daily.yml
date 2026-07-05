@@ -1,0 +1,46 @@
+# .github/workflows/daily.yml
+name: Daily Meme Collection
+
+on:
+  schedule:
+    # UTC 15:00 = 北京时间 23:00
+    - cron: "0 15 * * *"
+  workflow_dispatch:    # 支持手动触发
+
+permissions:
+  contents: write       # 允许 commit 回仓库
+
+concurrency:
+  group: daily-meme
+  cancel-in-progress: false    # 不允许并发跑(保护 SQLite)
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Run pipeline
+        env:
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          DAILYHOT_API_BASE: ${{ secrets.DAILYHOT_API_BASE }}
+        run: geng
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/memes.db daily/ || true
+          if git diff --staged --quiet; then
+            echo "无新增数据"
+          else
+            git commit -m "data: $(date -u +%Y-%m-%d) daily memes"
+            git push
+          fi
