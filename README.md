@@ -20,13 +20,13 @@
 ### 1. 准备 API Key
 
 - **DeepSeek**: 去 https://platform.deepseek.com 注册,创建 API Key
-- **DailyHotApi**: Fork [imsyy/DailyHotApi](https://github.com/imsyy/DailyHotApi),部署到 Vercel
 
 ### 2. 配置 GitHub Secrets
 
 在仓库 Settings → Secrets and variables → Actions 添加:
 - `LLM_API_KEY` — DeepSeek API Key
-- `DAILYHOT_API_BASE` — 你部署的 DailyHotApi 地址(如 `https://xxx.vercel.app`)
+
+> 数据源(微博/B站热搜)由本工具直接抓取,**无需**部署 DailyHotApi。
 
 ### 3. 启用 Actions
 
@@ -53,3 +53,5 @@ pytest                # 跑测试
 - AI 释义不是词典级权威,偶有不准确
 - 抽查发现误判时,可往 `data/exclude/stars.txt` 等清单加词
 - 初期排除清单薄,误判会偏多,需要养几周
+- **数据源**:微博接口需 cookie(常 403),主要依赖 B站热搜(50条/天)。单平台也足够产出候选
+- 抖音接口需鉴权,暂未接入

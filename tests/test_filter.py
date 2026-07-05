@@ -21,11 +21,13 @@ def test_star_excluded():
     out = coarse_filter([_item("迪丽热巴现身机场")], date="2026-07-05")
     assert out == []
 
-def test_cross_platform_required():
-    # 同标题只在一个平台,不过 MIN_PLATFORMS_CROSS=2
+def test_single_platform_passes_with_default_threshold():
+    """MIN_PLATFORMS_CROSS=1,单平台也能通过(很多梗只单平台爆发)。"""
     items = [_item("如何呢又能怎", platform="weibo")]
     out = coarse_filter(items, date="2026-07-05")
-    assert out == []
+    assert len(out) == 1
+    assert out[0].title == "如何呢又能怎"
+    assert out[0].platforms == ["weibo"]
 
 def test_cross_platform_passes():
     items = [

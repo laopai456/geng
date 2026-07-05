@@ -2,14 +2,14 @@
 import os
 from pathlib import Path
 
-# 数据源
-PLATFORMS = ["weibo", "bilibili", "douyin"]
-DAILYHOT_API_BASE = os.environ.get("DAILYHOT_API_BASE", "https://api-hot.imsyy.top")
+# 数据源 (直接抓取,不依赖 DailyHotApi)
+PLATFORMS = ["weibo", "bilibili"]
+DAILYHOT_API_BASE = os.environ.get("DAILYHOT_API_BASE", "")  # 已弃用,保留兼容
 
 # 粗筛规则
 EXCLUDE_LISTS_DIR = Path("data/exclude")
 MEME_LENGTH_RANGE = (3, 14)
-MIN_PLATFORMS_CROSS = 2
+MIN_PLATFORMS_CROSS = 1   # 单平台也算(只有 2 个源,且很多梗只单平台爆发)
 
 # LLM (DeepSeek, OpenAI 兼容接口)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "")

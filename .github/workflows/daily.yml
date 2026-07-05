@@ -30,7 +30,6 @@ jobs:
       - name: Run pipeline
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          DAILYHOT_API_BASE: ${{ secrets.DAILYHOT_API_BASE }}
         run: geng
 
       - name: Commit results
