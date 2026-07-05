@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {"id": "1", "title": "某明星离婚", "hot": "5000000", "url": "http://weibo.com/1", "mobileUrl": "http://m.weibo.cn/1"},
+    {"id": "2", "title": "如何呢又能怎", "hot": "1200000", "url": "http://weibo.com/2", "mobileUrl": "http://m.weibo.cn/2"},
+    {"id": "3", "title": "2026年7月5日", "hot": "300", "url": "http://weibo.com/3", "mobileUrl": "http://m.weibo.cn/3"}
+  ]
+}
