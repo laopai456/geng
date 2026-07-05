@@ -49,7 +49,23 @@ def classify_memes(
     batch_size: int = 20,
 ) -> list[ClassifiedMeme]:
     """分批调用 LLM,返回判定为梗的 ClassifiedMeme。"""
-    client = client or GLMClient()
+    # 无候选直接返回,避免在空跑时强制要求 LLM 凭据
+    if not candidates:
+        return []
+    # 客户端构造可能失败(如缺 API key),失败则整体降级
+    if client is None:
+        try:
+            client = GLMClient()
+        except Exception as e:
+            log.warning("classify: LLM 客户端构造失败,降级保留全部候选: %s", e)
+            return [
+                ClassifiedMeme(
+                    title=c.title, date=c.date, platforms=c.platforms,
+                    hot_scores=c.hot_scores, is_meme=None, confidence=0.0,
+                    classify_reason="LLM分类失败,降级保留",
+                )
+                for c in candidates
+            ]
     out: list[ClassifiedMeme] = []
     for i in range(0, len(candidates), batch_size):
         batch = candidates[i:i+batch_size]

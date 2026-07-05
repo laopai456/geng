@@ -41,7 +41,16 @@ def explain_meme(
     client: LLMClient | None = None,
 ) -> list[FinalMeme]:
     """逐条调 GLM-4.6 释义,失败时仍返回 FinalMeme(释义字段留空)。"""
-    client = client or GLMClient()
+    # 无候选直接返回,避免在空跑时强制要求 LLM 凭据
+    if not memes:
+        return []
+    # 客户端构造可能失败(如缺 API key),整体降级:释义留空
+    if client is None:
+        try:
+            client = GLMClient()
+        except Exception as e:
+            log.warning("explain: LLM 客户端构造失败,释义降级留空: %s", e)
+            return [FinalMeme.from_classified(m) for m in memes]
     out: list[FinalMeme] = []
     for m in memes:
         f = FinalMeme.from_classified(m)
