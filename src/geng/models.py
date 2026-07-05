@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class HotItem:
-    """[1] discover 阶段输出: 一条原始热搜。"""
+    """[1] discover 阶段输出: 一条原始热搜。(旧热搜榜流程,已弃用但保留兼容)"""
 
     id: str
     platform: str
@@ -14,6 +14,24 @@ class HotItem:
     hot: int
     url: str
     fetched_at: str  # ISO date
+
+
+@dataclass
+class VideoInfo:
+    """[1] discover 阶段输出: B站排行榜上的一个视频。"""
+
+    bvid: str
+    aid: int
+    title: str
+
+
+@dataclass
+class Comment:
+    """[1] discover 阶段输出: 一条评论。video_bvid 用于跨视频统计。"""
+
+    video_bvid: str
+    message: str
+    likes: int
 
 
 @dataclass

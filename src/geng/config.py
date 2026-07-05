@@ -11,6 +11,12 @@ EXCLUDE_LISTS_DIR = Path("data/exclude")
 MEME_LENGTH_RANGE = (3, 14)
 MIN_PLATFORMS_CROSS = 1   # 单平台也算(只有 2 个源,且很多梗只单平台爆发)
 
+# extract 阶段配置
+BASELINE_WORDS_FILE = Path("data/baseline/common_words.txt")
+EXTRACT_MIN_VIDEOS = 2          # 候选至少在 N 个不同视频出现
+EXTRACT_PHRASE_LEN_RANGE = (2, 8)  # 候选短语字符长度范围
+EXTRACT_TOP_K = 30              # 最终候选数量
+
 # LLM (DeepSeek, OpenAI 兼容接口)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "")
 CLASSIFY_MODEL = "deepseek-chat"          # 便宜,做分类
