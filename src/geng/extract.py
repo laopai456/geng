@@ -107,8 +107,11 @@ def extract_candidates(
     comments: list[Comment],
     top_k: int | None = None,
     min_videos: int | None = None,
-    ns: tuple[int, ...] = (1, 2, 3),
+    ns: tuple[int, ...] | None = None,
 ) -> list[str]:
+    top_k = top_k if top_k is not None else config.EXTRACT_TOP_K
+    min_videos = min_videos if min_videos is not None else config.EXTRACT_MIN_VIDEOS
+    ns = ns if ns is not None else config.EXTRACT_NGRAM_NS
     """从评论语料提取候选梗短语。
 
     Returns: 候选短语列表,按出现频次降序,长度 ≤ top_k。

@@ -16,6 +16,7 @@ BASELINE_WORDS_FILE = Path("data/baseline/common_words.txt")
 EXTRACT_MIN_VIDEOS = 1          # 候选至少在 N 个不同视频出现。无登录态每视频只~3条热评,跨视频概率低,放宽到 1
 EXTRACT_PHRASE_LEN_RANGE = (2, 8)  # 候选短语字符长度范围
 EXTRACT_TOP_K = 30              # 最终候选数量
+EXTRACT_NGRAM_NS = (1, 2, 3)    # 1-3 token 组合。单 token 靠基线词表 + 常用词过滤
 
 # LLM (DeepSeek, OpenAI 兼容接口)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "")
