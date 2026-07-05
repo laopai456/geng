@@ -1,6 +1,6 @@
 """[1.5] 从评论语料提取候选梗短语。
 
-jieba 分词 → 词级 1-3 gram → 基线词表过滤 → 跨视频过滤 → top_k。
+预处理(去表情/标点/URL) → jieba 分词 → 词级 2-3 gram → 基线词表过滤 → 跨视频过滤 → top_k。
 """
 from __future__ import annotations
 import logging
@@ -16,9 +16,21 @@ log = logging.getLogger(__name__)
 # 复用同一个 jieba 实例(避免重复初始化)
 _tokenize = jieba.lcut
 
-# 纯标点/符号/纯数字检测
-_PURE_PUNCT = re.compile(r"^[\s\d\W]+$")
-_PURE_DIGIT = re.compile(r"^\d+$")
+# B站文字表情: [doge] [笑哭] [OK] 等,方括号包裹的英文/中文
+_BILI_EMOTE = re.compile(r"\[[^\[\]]{1,10}\]")
+# URL
+_URL = re.compile(r"https?://\S+|www\.\S+")
+# @ 用户
+_MENTION = re.compile(r"@\S+")
+# 任何标点符号(中英文) — 用 Unicode 类别更稳: 所有非字母/非数字/非 CJK 字符
+_PUNCT = re.compile(r"[^\w\u4e00-\u9fff]")
+# 连续空白
+_WS = re.compile(r"\s+")
+
+# 短语内任何位置出现标点/数字 → 无效
+# \W 在 re 默认 (re.UNICODE) 下匹配非 [a-zA-Z0-9_] 与非所有 Unicode 字母;
+# 但我们要保留中日韩文,所以用反向: 含数字或 ASCII 标点 → 无效
+_DIGIT_OR_ASCII_PUNCT = re.compile(r"[\d!-/:-@\[-`{-~]")
 
 
 def _load_baseline(path: Path | None = None) -> set[str]:
@@ -34,13 +46,39 @@ def _load_baseline(path: Path | None = None) -> set[str]:
     return words
 
 
+def _clean_message(message: str) -> str:
+    """预处理: 去表情/URL/@用户/标点。只保留中英文字符(连成块)。"""
+    s = _BILI_EMOTE.sub(" ", message)
+    s = _URL.sub(" ", s)
+    s = _MENTION.sub(" ", s)
+    s = _PUNCT.sub(" ", s)
+    s = _WS.sub(" ", s).strip()
+    return s
+
+
 def _tokenize_comment(message: str) -> list[str]:
-    """jieba 分词,去空白 token。"""
-    return [t for t in _tokenize(message) if t.strip()]
+    """预处理 + jieba 分词。返回 token 列表(已去标点/空白)。"""
+    cleaned = _clean_message(message)
+    if not cleaned:
+        return []
+    return [t for t in _tokenize(cleaned) if t.strip() and _is_meaningful_token(t)]
+
+
+def _is_meaningful_token(tok: str) -> bool:
+    """token 至少含一个中文字符或 2+ 连续英文字符。过滤纯数字/单字母碎片。"""
+    if not tok:
+        return False
+    # 含中文
+    if re.search(r"[一-鿿]", tok):
+        return True
+    # 2+ 连续英文(如 YYDS, call, doge)
+    if re.search(r"[A-Za-z]{2,}", tok):
+        return True
+    return False
 
 
 def _phrase_ngrams(tokens: list[str], ns: tuple[int, ...] = (1, 2, 3)) -> list[str]:
-    """词级 n-gram。把 n 个连续 token 直接拼接(中文短语不需要空格分隔)。"""
+    """词级 n-gram。拼接 n 个连续 token。默认 1-3 gram(单 token 也算,靠 _is_valid_phrase 过滤)。"""
     out: list[str] = []
     for n in ns:
         for i in range(len(tokens) - n + 1):
@@ -56,9 +94,8 @@ def _is_valid_phrase(phrase: str, baseline: set[str], len_range: tuple[int, int]
     lo, hi = len_range
     if not (lo <= len(phrase) <= hi):
         return False
-    if _PURE_DIGIT.match(phrase):
-        return False
-    if _PURE_PUNCT.match(phrase):
+    # 含任何标点/数字 → 无效
+    if _DIGIT_OR_ASCII_PUNCT.search(phrase):
         return False
     # 整体在基线词表里 → 直接过滤
     if phrase in baseline:
@@ -86,6 +123,8 @@ def extract_candidates(
 
     for c in comments:
         tokens = _tokenize_comment(c.message)
+        if not tokens:
+            continue
         # 同一条评论内去重(一条评论重复说同一个词只算一次)
         phrases_in_comment = set(_phrase_ngrams(tokens, ns))
         for phrase in phrases_in_comment:
