@@ -1,10 +1,12 @@
 # src/geng/pipeline.py
-"""串联 discover → filter → classify → verify → explain → store + report。
-每个外部依赖都用模块级引用,便于测试 monkeypatch。失败降级不阻塞。"""
+"""串联 discover → extract → filter → classify → verify → explain → store + report。
+
+新流程: 抓 B站热门视频评论 → jieba 提取候选梗 → 排除清单过滤 → LLM 分类 → B站验证 → LLM 释义 → 入库。
+"""
 from __future__ import annotations
 import logging
 from pathlib import Path
-from . import discover, filter as filter_mod, classify, verify, explain, store, report
+from . import discover, extract, filter as filter_mod, classify, verify, explain, store, report
 
 log = logging.getLogger(__name__)
 
@@ -17,14 +19,21 @@ def run_daily(
     import datetime
     date = date or datetime.date.today().isoformat()
 
-    # [1] 发现
-    items = discover.fetch_trending(date=date)
-    total_raw = len(items)
-    log.info("[1] discover: %d 条原始热搜", total_raw)
+    # [1] 发现: 抓视频 + 评论
+    videos, comments = discover.collect_corpus()
+    log.info("[1] discover: %d 视频, %d 条评论", len(videos), len(comments))
+    total_raw = len(comments)
 
-    # [2] 粗筛
-    candidates = filter_mod.coarse_filter(items, date=date)
-    log.info("[2] filter: %d 条候选", len(candidates))
+    # [1.5] 提取: 评论 → 候选短语
+    phrases = extract.extract_candidates(comments)
+    # 同时拿到每个短语的出现次数(用于热度排序)。重新统计一次,或者改 extract 返回。
+    # 简单做法: 让 extract 也返回 counts。但为不破坏 extract 签名,这里在 pipeline 重算。
+    phrase_counts = _count_phrases(comments, phrases)
+    log.info("[1.5] extract: %d 个候选短语", len(phrases))
+
+    # [2] 粗筛: 排除清单
+    candidates = filter_mod.coarse_filter(phrases, date=date, phrase_counts=phrase_counts)
+    log.info("[2] filter: %d 条通过排除清单", len(candidates))
 
     # [3] LLM 分类 (内部已降级)
     classified = classify.classify_memes(candidates)
@@ -44,3 +53,16 @@ def run_daily(
     report.render_daily_report(finals, date=date, total_raw=total_raw, out_dir=report_dir)
     log.info("[6] store: 入库 %d 条, 日报已生成", n)
     return n
+
+
+def _count_phrases(comments, phrases) -> dict[str, int]:
+    """统计每个候选短语在多少条评论里出现。用于热度。"""
+    result = {p: 0 for p in phrases}
+    phrase_set = set(phrases)
+    for c in comments:
+        # 简单 substring 匹配
+        msg = c.message
+        for p in phrase_set:
+            if p in msg:
+                result[p] += 1
+    return result

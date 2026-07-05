@@ -22,7 +22,7 @@ def render_daily_report(
     lines.append(f"# {date} 热梗日报")
     lines.append("")
     lines.append(
-        f"> 共采集 {total_raw} 条热搜,经筛选入库 {len(memes)} 条"
+        f"> 共采集 {total_raw} 条评论,经筛选入库 {len(memes)} 条"
         f"(其中 {len(verified)} 条已验证)"
     )
     lines.append("")
