@@ -16,7 +16,8 @@ class HttpxBiliClient:
     def search_count(self, keyword: str) -> int | None:
         params = {"search_type": "video", "keyword": keyword, "page_size": 1}
         headers = {"User-Agent": "Mozilla/5.0"}
-        with httpx.Client(timeout=config.HTTP_TIMEOUT) as client:
+        # trust_env=False: 绕开系统代理(见 discover.py 注释)
+        with httpx.Client(timeout=config.HTTP_TIMEOUT, trust_env=False) as client:
             resp = client.get(config.BILI_SEARCH_URL, params=params, headers=headers)
             resp.raise_for_status()
             return parse_bili_count(resp.json())

@@ -23,7 +23,8 @@ class DeepSeekClient:
     @retry(stop=stop_after_attempt(config.LLM_MAX_RETRY + 1), reraise=True)
     def chat(self, model: str, messages: list[dict]) -> str:
         url = f"{config.LLM_BASE_URL}/chat/completions"
-        with httpx.Client(timeout=config.LLM_TIMEOUT) as client:
+        # trust_env=False: 见 discover.py 同款注释,绕开坏掉的系统代理
+        with httpx.Client(timeout=config.LLM_TIMEOUT, trust_env=False) as client:
             resp = client.post(
                 url,
                 headers={"Authorization": f"Bearer {self.api_key}"},
