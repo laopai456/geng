@@ -31,7 +31,9 @@ _HEADERS = {
 
 def _make_session() -> httpx.Client:
     """创建带 cookie 的会话: 先访问 B站首页拿 buvid3,否则评论接口 -352 风控。"""
-    client = httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS, follow_redirects=True)
+    # trust_env=False: 忽略系统代理。本地环境注册表里常挂着坏代理(端口在但
+    # 不转发),会让所有请求超时;CI 无代理,直连最快最稳。
+    client = httpx.Client(timeout=config.HTTP_TIMEOUT, headers=_HEADERS, follow_redirects=True, trust_env=False)
     try:
         client.get("https://www.bilibili.com/")
         log.info("discover: 会话已建立, cookies=%s", list(client.cookies.keys()))
@@ -41,23 +43,50 @@ def _make_session() -> httpx.Client:
 
 
 def fetch_top_videos(client: httpx.Client, limit: int = 10) -> list[VideoInfo]:
-    """B站全站排行榜 top N 视频。接口空时返回 []。"""
-    resp = client.get(config.BILI_RANKING_URL, params={"rid": 0, "type": "all"})
-    resp.raise_for_status()
-    raw = resp.json()
-    entries = raw.get("data", {}).get("list") or []
+    """B站热门流 top N 视频。popular 接口按 ps/pn 分页(ps 上限 20)。
+
+    接口空或风控时返回 []。
+    """
     videos: list[VideoInfo] = []
-    for e in entries[:limit]:
+    ps = 20  # popular 接口单页上限
+    pages = (limit + ps - 1) // ps  # 向上取整
+    for pn in range(1, pages + 1):
         try:
-            videos.append(
-                VideoInfo(
-                    bvid=str(e.get("bvid", "")),
-                    aid=int(e.get("aid", 0)),
-                    title=str(e.get("title", "")).strip(),
-                )
+            resp = client.get(
+                config.BILI_POPULAR_URL,
+                params={"ps": ps, "pn": pn},
             )
-        except (TypeError, ValueError):
-            continue
+            resp.raise_for_status()
+            raw = resp.json()
+        except Exception as e:
+            log.warning("discover: popular 第 %d 页失败: %s", pn, e)
+            break
+        if raw.get("code") != 0:
+            # -352 = 风控(频率/IP)。停止翻页,返回已抓到的。
+            log.warning(
+                "discover: popular 接口 code=%s msg=%s (常见 -352 风控)",
+                raw.get("code"), raw.get("message", ""),
+            )
+            break
+        entries = raw.get("data", {}).get("list") or []
+        if not entries:
+            break
+        for e in entries:
+            if len(videos) >= limit:
+                break
+            try:
+                videos.append(
+                    VideoInfo(
+                        bvid=str(e.get("bvid", "")),
+                        aid=int(e.get("aid", 0)),
+                        title=str(e.get("title", "")).strip(),
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        if len(videos) >= limit:
+            break
+        time.sleep(0.3)  # 翻页间留间隔,降低风控触发
     return videos
 
 

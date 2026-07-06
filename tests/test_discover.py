@@ -77,8 +77,10 @@ class FakeClient:
 # ---------------------------------------------------------------------------
 # fixtures: 样本 JSON
 # ---------------------------------------------------------------------------
-def _ranking_json(n=3):
+def _popular_json(n=3):
+    """popular 接口响应:n 个视频。code=0 是成功标志(ranking 不带 code,需补)。"""
     return {
+        "code": 0,
         "data": {
             "list": [
                 {
@@ -88,7 +90,7 @@ def _ranking_json(n=3):
                 }
                 for i in range(n)
             ]
-        }
+        },
     }
 
 
@@ -110,9 +112,9 @@ def _replies_json(messages_likes, next_cursor=0):
 # ===========================================================================
 # 1. fetch_top_videos
 # ===========================================================================
-def test_fetch_top_videos_parses_ranking():
-    """排行榜 3 个视频 -> 3 个 VideoInfo,字段正确。"""
-    client = FakeClient({"ranking": FakeResp(_ranking_json(3))})
+def test_fetch_top_videos_parses_popular():
+    """热门流 3 个视频 -> 3 个 VideoInfo,字段正确。"""
+    client = FakeClient({"popular": FakeResp(_popular_json(3))})
     videos = fetch_top_videos(client, limit=10)
     assert len(videos) == 3
     v0 = videos[0]
@@ -125,18 +127,48 @@ def test_fetch_top_videos_parses_ranking():
 
 def test_fetch_top_videos_empty_list_returns_empty():
     """data.list 为空/缺失 -> 返回 [] (不崩)。"""
-    client = FakeClient({"ranking": FakeResp({"data": {}})})
+    client = FakeClient({"popular": FakeResp({"code": 0, "data": {}})})
     assert fetch_top_videos(client) == []
 
-    client2 = FakeClient({"ranking": FakeResp({"data": {"list": []}})})
+    client2 = FakeClient({"popular": FakeResp({"code": 0, "data": {"list": []}})})
     assert fetch_top_videos(client2) == []
 
 
 def test_fetch_top_videos_respects_limit():
-    """limit 截断返回数量。"""
-    client = FakeClient({"ranking": FakeResp(_ranking_json(5))})
+    """limit 截断返回数量(limit=2 时只取前 2 个)。"""
+    client = FakeClient({"popular": FakeResp(_popular_json(5))})
     videos = fetch_top_videos(client, limit=2)
     assert len(videos) == 2
+
+
+def test_fetch_top_videos_paginates():
+    """limit > 20 时跨页拼接:2 页各 20 条 -> 30 条。"""
+    page1 = FakeResp(_popular_json(20))
+    page2 = FakeResp(_popular_json(10))
+    queue = [page1, page2]
+
+    class SeqClient(FakeClient):
+        def get(self, url, params=None, headers=None):
+            if "bilibili.com/" in url and "api" not in url:
+                return FakeResp({"code": 0})
+            if "popular" in url and queue:
+                return queue.pop(0)
+            return FakeResp({"code": -1, "message": "exhausted"})
+
+    videos = fetch_top_videos(SeqClient({}), limit=30)
+    assert len(videos) == 30
+    # 第二页视频从 aid=1000 重新生成(测试 fixture),只验总数
+
+
+def test_fetch_top_videos_stops_on_risk_control(caplog):
+    """popular 返回 code=-352(风控) -> 停止翻页,返回已抓到的(可能为空)。"""
+    client = FakeClient({
+        "popular": FakeResp({"code": -352, "message": "风控"}),
+    })
+    with caplog.at_level(logging.WARNING, logger="geng.discover"):
+        videos = fetch_top_videos(client, limit=20)
+    assert videos == []
+    assert any("-352" in r.getMessage() for r in caplog.records)
 
 
 # ===========================================================================
@@ -246,8 +278,9 @@ def test_collect_corpus_aggregates_and_skips_failed(monkeypatch, caplog):
         def get(self, url, params=None, headers=None):
             if "bilibili.com/" in url and "api" not in url:
                 return FakeResp({"code": 0})
-            if "ranking" in url:
+            if "popular" in url:
                 return FakeResp({
+                    "code": 0,
                     "data": {"list": [
                         {"aid": 1, "bvid": "BV1", "title": "v1"},
                         {"aid": 2, "bvid": "BV2", "title": "v2"},

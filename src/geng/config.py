@@ -31,8 +31,10 @@ BILI_VERIFY_THRESHOLD = 20
 BILI_SEARCH_URL = "https://api.bilibili.com/x/web-interface/search/type"
 HTTP_TIMEOUT = 20
 
-# B站 discover: 排行榜 + 评论接口(2026-07 改版,直接抓评论区挖梗)
-BILI_RANKING_URL = "https://api.bilibili.com/x/web-interface/ranking/v2"
+# B站 discover: 热门视频 + 评论接口(2026-07 改版,直接抓评论区挖梗)
+# 用 popular(热门流)而非 ranking(排行榜):ranking 在多数环境被 -352 风控,
+# popular 更稳定且评论区更活跃。
+BILI_POPULAR_URL = "https://api.bilibili.com/x/web-interface/popular"
 BILI_REPLY_URL = "https://api.bilibili.com/x/v2/reply/main"
 
 # 存储
