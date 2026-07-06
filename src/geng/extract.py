@@ -87,8 +87,27 @@ def _phrase_ngrams(tokens: list[str], ns: tuple[int, ...] = (1, 2, 3)) -> list[s
     return out
 
 
-def _is_valid_phrase(phrase: str, baseline: set[str], len_range: tuple[int, int]) -> bool:
-    """短语是否值得作为候选。"""
+def _single_char_stopwords(baseline: set[str]) -> set[str]:
+    """从 baseline 里抽出所有单字词,作为 stopword。
+    用于过滤「就是/不是/还是」这类由两个单字虚词拼成的碎片。
+    """
+    return {w for w in baseline if len(w) == 1}
+
+
+def _is_valid_phrase(
+    phrase: str,
+    baseline: set[str],
+    len_range: tuple[int, int],
+    stopwords: set[str] | None = None,
+) -> bool:
+    """短语是否值得作为候选。
+
+    三层过滤:
+    1. 整体在 baseline → 过滤(精确匹配)
+    2. 短词(≤3 字)若完全由单字 stopword 组成 → 过滤(挡「就是/不是」)
+       长短语(如「破防了」「爷青回」)即便含「了/回」也保留
+    3. 含标点/数字 → 过滤
+    """
     if not phrase:
         return False
     lo, hi = len_range
@@ -100,6 +119,11 @@ def _is_valid_phrase(phrase: str, baseline: set[str], len_range: tuple[int, int]
     # 整体在基线词表里 → 直接过滤
     if phrase in baseline:
         return False
+    # 双保险: 短词(≤3字)若每个字都是单字 stopword → 是虚词碎片,过滤
+    if stopwords and len(phrase) <= 3:
+        chars = {ch for ch in phrase if re.search(r"[一-鿿]", ch)}
+        if chars and chars <= stopwords:
+            return False
     return True
 
 
@@ -109,16 +133,15 @@ def extract_candidates(
     min_videos: int | None = None,
     ns: tuple[int, ...] | None = None,
 ) -> list[str]:
-    top_k = top_k if top_k is not None else config.EXTRACT_TOP_K
-    min_videos = min_videos if min_videos is not None else config.EXTRACT_MIN_VIDEOS
-    ns = ns if ns is not None else config.EXTRACT_NGRAM_NS
     """从评论语料提取候选梗短语。
 
     Returns: 候选短语列表,按出现频次降序,长度 ≤ top_k。
     """
     top_k = top_k if top_k is not None else config.EXTRACT_TOP_K
     min_videos = min_videos if min_videos is not None else config.EXTRACT_MIN_VIDEOS
+    ns = ns if ns is not None else config.EXTRACT_NGRAM_NS
     baseline = _load_baseline()
+    stopwords = _single_char_stopwords(baseline)
     len_range = config.EXTRACT_PHRASE_LEN_RANGE
 
     # phrase -> {"count": int, "videos": set[str]}
@@ -131,7 +154,7 @@ def extract_candidates(
         # 同一条评论内去重(一条评论重复说同一个词只算一次)
         phrases_in_comment = set(_phrase_ngrams(tokens, ns))
         for phrase in phrases_in_comment:
-            if not _is_valid_phrase(phrase, baseline, len_range):
+            if not _is_valid_phrase(phrase, baseline, len_range, stopwords):
                 continue
             stats[phrase]["count"] += 1
             stats[phrase]["videos"].add(c.video_bvid)

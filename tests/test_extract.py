@@ -40,6 +40,33 @@ def test_is_valid_phrase_rejects_short_long_digit_punct_baseline():
     assert _is_valid_phrase("YYDS", baseline, len_range) is True        # 有效
 
 
+def test_is_valid_phrase_stopword_rule_filters_function_word_fragments():
+    """双保险: 短词(≤3字)全由单字虚词组成 → 过滤,即便不在 baseline 里。
+    长短语(如「破防了」)含虚词也保留。
+    """
+    baseline = {"的", "是", "就", "不", "还", "了"}   # 含单字虚词
+    len_range = (2, 8)
+    stopwords = {"的", "是", "就", "不", "还", "了"}
+
+    # 虚词碎片 → 过滤
+    assert _is_valid_phrase("就是", baseline, len_range, stopwords) is False
+    assert _is_valid_phrase("不是", baseline, len_range, stopwords) is False
+    assert _is_valid_phrase("还是", baseline, len_range, stopwords) is False
+    assert _is_valid_phrase("了是", baseline, len_range, stopwords) is False
+
+    # 真梗含虚词 → 保留(长度 >3 或含非虚词字)
+    assert _is_valid_phrase("破防了", baseline, len_range, stopwords) is True
+    assert _is_valid_phrase("爷青回", baseline, len_range, stopwords) is True
+    assert _is_valid_phrase("YYDS", baseline, len_range, stopwords) is True
+
+
+def test_is_valid_phrase_stopword_none_falls_back_to_baseline_only():
+    """不传 stopwords(旧调用方式)→ 只走 baseline 整体匹配,兼容。"""
+    baseline = {"的"}
+    assert _is_valid_phrase("就是", baseline, (2, 8)) is True   # 不在 baseline,通过
+    assert _is_valid_phrase("的", baseline, (2, 8)) is False
+
+
 # ---------------------------------------------------------------------------
 # 3. 跨视频命中
 # ---------------------------------------------------------------------------
